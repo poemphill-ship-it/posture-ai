@@ -3,7 +3,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>AI 공부 자세 교정</title>
+<title>AI 자세 교정</title>
 
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
@@ -36,7 +36,7 @@ border-radius:10px;
 }
 
 .score{
-font-size:28px;
+font-size:26px;
 margin-top:10px;
 }
 
@@ -51,19 +51,8 @@ margin-top:10px;
 #chart{
 width:100%;
 max-width:600px;
-height:140px;
-margin-top:10px;
+height:120px;
 border:1px solid #ccc;
-}
-
-.timer{
-font-size:24px;
-margin-top:10px;
-}
-
-button{
-padding:10px 20px;
-font-size:16px;
 margin-top:10px;
 }
 
@@ -76,12 +65,6 @@ margin-top:10px;
 <div class="header">
 AI 공부 자세 교정
 </div>
-
-<div class="timer" id="timer">
-공부시간: 30:00
-</div>
-
-<button onclick="startStudy()">공부 시작</button>
 
 <video id="video" autoplay playsinline style="display:none"></video> <canvas id="canvas"></canvas>
 
@@ -107,45 +90,12 @@ const chartCtx=chart.getContext("2d")
 const scoreText=document.getElementById("scoreText")
 const message=document.getElementById("message")
 
-const timerText=document.getElementById("timer")
-
 let lastPoints={}
-let badTime=0
 let scoreHistory=[]
 
-let studyTime=1800
-let timerRunning=false
-
-function startStudy(){
-
-timerRunning=true
-
-setInterval(()=>{
-
-if(timerRunning){
-
-studyTime--
-
-let m=Math.floor(studyTime/60)
-let s=studyTime%60
-
-timerText.innerText="공부시간: "+m+":"+s.toString().padStart(2,"0")
-
-if(studyTime<=0){
-
-alert("5분 휴식하세요!")
-
-studyTime=300
-
-}
-
-}
-
-},1000)
-
-}
-
 async function setupCamera(){
+
+try{
 
 const stream=await navigator.mediaDevices.getUserMedia({
 video:{
@@ -157,17 +107,101 @@ height:{ideal:720}
 
 video.srcObject=stream
 
-return new Promise(resolve=>{
-video.onloadedmetadata=()=>{
-video.play()
-resolve()
-}
-})
+await video.play()
+
+}catch(e){
+
+alert("카메라 접근 실패")
 
 }
 
-async function start(){
+}
 
-await setupCamera()
+function smooth(name,x,y){
 
-const detector=await
+if(!lastPoints[name]){
+lastPoints[name]={x,y}
+}
+
+lastPoints[name].x=lastPoints[name].x*0.7+x*0.3
+lastPoints[name].y=lastPoints[name].y*0.7+y*0.3
+
+return lastPoints[name]
+
+}
+
+function drawChart(){
+
+chart.width=canvas.width
+chart.height=120
+
+chartCtx.clearRect(0,0,chart.width,chart.height)
+
+chartCtx.beginPath()
+
+for(let i=0;i<scoreHistory.length;i++){
+
+let x=i*10
+let y=120-scoreHistory[i]
+
+if(i===0){
+chartCtx.moveTo(x,y)
+}else{
+chartCtx.lineTo(x,y)
+}
+
+}
+
+chartCtx.stroke()
+
+}
+
+async function detectPose(detector){
+
+const poses=await detector.estimatePoses(video)
+
+canvas.width=video.videoWidth
+canvas.height=video.videoHeight
+
+ctx.drawImage(video,0,0)
+
+if(poses.length>0){
+
+const keypoints=poses[0].keypoints
+
+let nose,shoulder,hip
+
+for(let kp of keypoints){
+
+if(kp.score>0.4){
+
+let p=smooth(kp.name,kp.x,kp.y)
+
+ctx.beginPath()
+ctx.arc(p.x,p.y,6,0,Math.PI*2)
+ctx.fillStyle="red"
+ctx.fill()
+
+if(kp.name==="nose") nose=p
+if(kp.name==="left_shoulder") shoulder=p
+if(kp.name==="left_hip") hip=p
+
+}
+
+}
+
+let score=100
+let msg="좋은 자세입니다 🙂"
+
+if(nose && shoulder){
+
+if(nose.x>shoulder.x+40){
+score-=40
+msg="거북목입니다. 목을 뒤로 당기세요"
+}
+
+}
+
+if(shoulder && hip){
+
+let dx
