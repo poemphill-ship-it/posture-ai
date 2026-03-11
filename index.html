@@ -1,20 +1,22 @@
 <!DOCTYPE html>
+
 <html>
 <head>
 <meta charset="UTF-8">
-<title>AI 자세 교정</title>
+<title>AI 공부 자세 분석</title>
 
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
 
 <style>
 
 body{
 margin:0;
-background:#f2f2f2;
 font-family:sans-serif;
+background:#f2f2f2;
 text-align:center;
 }
 
@@ -22,18 +24,18 @@ text-align:center;
 background:#4CAF50;
 color:white;
 padding:15px;
-font-size:20px;
+font-size:22px;
 }
 
 canvas{
 width:100%;
 max-width:600px;
+border:2px solid #ccc;
 border-radius:10px;
-border:2px solid #ddd;
 }
 
 .score{
-font-size:26px;
+font-size:28px;
 margin-top:10px;
 }
 
@@ -45,17 +47,25 @@ margin-top:10px;
 .good{color:green;}
 .bad{color:red;}
 
+#chart{
+width:100%;
+max-width:600px;
+height:150px;
+border:1px solid #ccc;
+margin-top:10px;
+}
+
 </style>
+
 </head>
 
 <body>
 
 <div class="header">
-AI 공부 자세 교정
+AI 공부 자세 교정 (옆모습)
 </div>
 
-<video id="video" autoplay playsinline style="display:none"></video>
-<canvas id="canvas"></canvas>
+<video id="video" autoplay playsinline style="display:none"></video> <canvas id="canvas"></canvas>
 
 <div class="score" id="scoreText">
 자세 점수: 100
@@ -65,17 +75,23 @@ AI 공부 자세 교정
 좋은 자세입니다 🙂
 </div>
 
+<canvas id="chart"></canvas>
+
 <script>
 
 const video=document.getElementById("video")
 const canvas=document.getElementById("canvas")
 const ctx=canvas.getContext("2d")
 
+const chart=document.getElementById("chart")
+const chartCtx=chart.getContext("2d")
+
 const scoreText=document.getElementById("scoreText")
 const message=document.getElementById("message")
 
-// 점 흔들림 줄이기용
 let lastPoints={}
+let badTime=0
+let scoreHistory=[]
 
 async function setupCamera(){
 
@@ -110,7 +126,7 @@ detectPose(detector)
 
 }
 
-function smoothPoint(name,x,y){
+function smooth(name,x,y){
 
 if(!lastPoints[name]){
 lastPoints[name]={x,y}
@@ -120,6 +136,32 @@ lastPoints[name].x=lastPoints[name].x*0.7+x*0.3
 lastPoints[name].y=lastPoints[name].y*0.7+y*0.3
 
 return lastPoints[name]
+
+}
+
+function drawChart(){
+
+chart.width=canvas.width
+chart.height=150
+
+chartCtx.clearRect(0,0,chart.width,chart.height)
+
+chartCtx.beginPath()
+
+for(let i=0;i<scoreHistory.length;i++){
+
+let x=i*10
+let y=150-scoreHistory[i]
+
+if(i===0){
+chartCtx.moveTo(x,y)
+}else{
+chartCtx.lineTo(x,y)
+}
+
+}
+
+chartCtx.stroke()
 
 }
 
@@ -136,17 +178,13 @@ if(poses.length>0){
 
 const keypoints=poses[0].keypoints
 
-let score=100
-let msg="좋은 자세입니다 🙂"
-let bad=false
-
-let nose,leftShoulder,rightShoulder,leftHip
+let nose,shoulder,hip
 
 for(let kp of keypoints){
 
 if(kp.score>0.4){
 
-let p=smoothPoint(kp.name,kp.x,kp.y)
+let p=smooth(kp.name,kp.x,kp.y)
 
 ctx.beginPath()
 ctx.arc(p.x,p.y,6,0,Math.PI*2)
@@ -154,46 +192,34 @@ ctx.fillStyle="red"
 ctx.fill()
 
 if(kp.name==="nose") nose=p
-if(kp.name==="left_shoulder") leftShoulder=p
-if(kp.name==="right_shoulder") rightShoulder=p
-if(kp.name==="left_hip") leftHip=p
+if(kp.name==="left_shoulder") shoulder=p
+if(kp.name==="left_hip") hip=p
 
 }
 
 }
 
-// 어깨 기울기
-if(leftShoulder && rightShoulder){
+let score=100
+let msg="좋은 자세입니다 🙂"
+let bad=false
 
-let dy=leftShoulder.y-rightShoulder.y
+// 거북목 (옆모습)
+if(nose && shoulder){
 
-if(Math.abs(dy)>20){
-score-=20
-msg="어깨 균형을 맞추세요"
+if(nose.x>shoulder.x+40){
+score-=40
+msg="거북목입니다! 목을 뒤로 당기세요"
 bad=true
 }
 
 }
 
-// 거북목
-if(nose && leftShoulder && rightShoulder){
+// 허리 굽음
+if(shoulder && hip){
 
-let shoulderX=(leftShoulder.x+rightShoulder.x)/2
+let dx=Math.abs(shoulder.x-hip.x)
 
-if(nose.x>shoulderX+40){
-score-=30
-msg="목을 뒤로 당기세요"
-bad=true
-}
-
-}
-
-// 허리
-if(leftShoulder && leftHip){
-
-let dy=leftHip.y-leftShoulder.y
-
-if(dy<100){
+if(dx>40){
 score-=30
 msg="허리를 펴세요"
 bad=true
@@ -206,9 +232,26 @@ message.innerText=msg
 
 if(bad){
 message.className="message bad"
+badTime++
 }else{
 message.className="message good"
+badTime=0
 }
+
+if(badTime>900){
+
+alert("30초 동안 자세가 나쁩니다! 자세를 바로 잡으세요.")
+badTime=0
+
+}
+
+scoreHistory.push(score)
+
+if(scoreHistory.length>60){
+scoreHistory.shift()
+}
+
+drawChart()
 
 }
 
