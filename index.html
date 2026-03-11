@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>AI 자세 교정 앱</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+
+<style>
+
+body{
+margin:0;
+background:#f2f2f2;
+font-family:sans-serif;
+text-align:center;
+}
+
+.header{
+background:#4CAF50;
+color:white;
+padding:15px;
+font-size:20px;
+}
+
+.container{
+padding:10px;
+}
+
+video{
+display:none;
+}
+
+canvas{
+width:100%;
+max-width:500px;
+border-radius:10px;
+border:2px solid #ddd;
+}
+
+.card{
+background:white;
+padding:15px;
+margin-top:10px;
+border-radius:10px;
+box-shadow:0 2px 5px rgba(0,0,0,0.1);
+}
+
+.score{
+font-size:28px;
+font-weight:bold;
+}
+
+.good{
+color:green;
+}
+
+.bad{
+color:red;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="header">
+AI 공부 자세 교정 앱
+</div>
+
+<div class="container">
+
+<video id="video" autoplay></video>
+
+<canvas id="canvas" width="640" height="480"></canvas>
+
+<div class="card">
+<div class="score" id="scoreText">자세 점수: 100</div>
+</div>
+
+<div class="card" id="message">
+좋은 자세입니다 🙂
+</div>
+
+</div>
+
+<script>
+
+const video=document.getElementById("video")
+const canvas=document.getElementById("canvas")
+const ctx=canvas.getContext("2d")
+
+const scoreText=document.getElementById("scoreText")
+const message=document.getElementById("message")
+
+function beep(){
+
+let audioCtx=new(window.AudioContext||window.webkitAudioContext)()
+let oscillator=audioCtx.createOscillator()
+
+oscillator.frequency.value=800
+oscillator.connect(audioCtx.destination)
+oscillator.start()
+
+setTimeout(()=>oscillator.stop(),200)
+
+}
+
+async function setupCamera(){
+
+const stream=await navigator.mediaDevices.getUserMedia({video:true})
+
+video.srcObject=stream
+
+return new Promise(resolve=>{
+video.onloadedmetadata=()=>{
+video.play()
+resolve()
+}
+})
+
+}
+
+async function start(){
+
+await setupCamera()
+
+const detector=await poseDetection.createDetector(
+poseDetection.SupportedModels.MoveNet
+)
+
+detectPose(detector)
+
+}
+
+async function detectPose(detector){
+
+const poses=await detector.estimatePoses(video)
+
+ctx.drawImage(video,0,0,640,480)
+
+if(poses.length>0){
+
+const keypoints=poses[0].keypoints
+
+for(let i=0;i<keypoints.length;i++){
+
+const kp=keypoints[i]
+
+if(kp.score>0.4){
+
+ctx.beginPath()
+ctx.arc(kp.x,kp.y,5,0,Math.PI*2)
+ctx.fillStyle="red"
+ctx.fill()
+
+}
+
+}
+
+const nose=keypoints.find(k=>k.name==="nose")
+const leftShoulder=keypoints.find(k=>k.name==="left_shoulder")
+const rightShoulder=keypoints.find(k=>k.name==="right_shoulder")
+const leftHip=keypoints.find(k=>k.name==="left_hip")
+
+let score=100
+let msg="좋은 자세입니다 🙂"
+let bad=false
+
+// 어깨 기울기
+if(leftShoulder && rightShoulder){
+
+let dy=leftShoulder.y-rightShoulder.y
+
+if(Math.abs(dy)>20){
+
+score-=20
+msg="어깨 균형을 맞추세요"
+bad=true
+
+}
+
+}
+
+// 거북목
+if(nose && leftShoulder && rightShoulder){
+
+let shoulderX=(leftShoulder.x+rightShoulder.x)/2
+
+if(nose.x>shoulderX+40){
+
+score-=30
+msg="목을 뒤로 당기세요"
+bad=true
+
+}
+
+}
+
+// 허리
+if(leftShoulder && leftHip){
+
+let dy=leftHip.y-leftShoulder.y
+
+if(dy<100){
+
+score-=30
+msg="허리를 펴세요"
+bad=true
+
+}
+
+}
+
+scoreText.innerText="자세 점수: "+score
+
+message.innerText=msg
+
+if(bad){
+message.className="card bad"
+beep()
+}else{
+message.className="card good"
+}
+
+}
+
+requestAnimationFrame(()=>detectPose(detector))
+
+}
+
+start()
+
+</script>
+
+</body>
+</html>
