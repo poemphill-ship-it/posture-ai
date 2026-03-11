@@ -3,7 +3,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>AI 자세 교정</title>
+<title>AI 공부 자세 분석</title>
 
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
@@ -40,6 +40,11 @@ font-size:26px;
 margin-top:10px;
 }
 
+.grade{
+font-size:24px;
+margin-top:5px;
+}
+
 .message{
 font-size:20px;
 margin-top:10px;
@@ -63,13 +68,17 @@ margin-top:10px;
 <body>
 
 <div class="header">
-AI 공부 자세 교정
+AI 공부 자세 분석
 </div>
 
 <video id="video" autoplay playsinline style="display:none"></video> <canvas id="canvas"></canvas>
 
 <div class="score" id="scoreText">
 자세 점수: 100
+</div>
+
+<div class="grade" id="gradeText">
+등급: A
 </div>
 
 <div class="message good" id="message">
@@ -88,6 +97,7 @@ const chart=document.getElementById("chart")
 const chartCtx=chart.getContext("2d")
 
 const scoreText=document.getElementById("scoreText")
+const gradeText=document.getElementById("gradeText")
 const message=document.getElementById("message")
 
 let lastPoints={}
@@ -106,7 +116,6 @@ height:{ideal:720}
 })
 
 video.srcObject=stream
-
 await video.play()
 
 }catch(e){
@@ -156,6 +165,26 @@ chartCtx.stroke()
 
 }
 
+function getGrade(score){
+
+if(score>=90) return "A"
+if(score>=70) return "B"
+if(score>=50) return "C"
+return "D"
+
+}
+
+function drawArrow(x1,y1,x2,y2){
+
+ctx.beginPath()
+ctx.moveTo(x1,y1)
+ctx.lineTo(x2,y2)
+ctx.strokeStyle="yellow"
+ctx.lineWidth=4
+ctx.stroke()
+
+}
+
 async function detectPose(detector){
 
 const poses=await detector.estimatePoses(video)
@@ -192,16 +221,95 @@ if(kp.name==="left_hip") hip=p
 
 let score=100
 let msg="좋은 자세입니다 🙂"
+let bad=false
 
+// 바른 자세 기준선
+if(shoulder && hip){
+
+ctx.beginPath()
+ctx.moveTo(shoulder.x,shoulder.y)
+ctx.lineTo(hip.x,hip.y)
+ctx.strokeStyle="blue"
+ctx.lineWidth=3
+ctx.stroke()
+
+}
+
+// 거북목
 if(nose && shoulder){
 
 if(nose.x>shoulder.x+40){
+
 score-=40
-msg="거북목입니다. 목을 뒤로 당기세요"
-}
+msg="목을 뒤로 당기세요"
+bad=true
+
+drawArrow(nose.x,nose.y,nose.x-60,nose.y)
 
 }
 
+}
+
+// 허리
 if(shoulder && hip){
 
-let dx
+let dx=Math.abs(shoulder.x-hip.x)
+
+if(dx>40){
+
+score-=30
+msg="허리를 펴세요"
+bad=true
+
+drawArrow(shoulder.x,shoulder.y,shoulder.x,shoulder.y-60)
+
+}
+
+}
+
+scoreText.innerText="자세 점수: "+score
+
+let grade=getGrade(score)
+
+gradeText.innerText="등급: "+grade
+
+message.innerText=msg
+
+if(bad){
+message.className="message bad"
+}else{
+message.className="message good"
+}
+
+scoreHistory.push(score)
+
+if(scoreHistory.length>40){
+scoreHistory.shift()
+}
+
+drawChart()
+
+}
+
+requestAnimationFrame(()=>detectPose(detector))
+
+}
+
+async function start(){
+
+await setupCamera()
+
+const detector=await poseDetection.createDetector(
+poseDetection.SupportedModels.MoveNet
+)
+
+detectPose(detector)
+
+}
+
+start()
+
+</script>
+
+</body>
+</html>
