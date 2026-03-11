@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>AI 자세 교정 앱</title>
+<title>AI 자세 교정</title>
 
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
@@ -35,22 +35,19 @@ display:none;
 
 canvas{
 width:100%;
-max-width:500px;
+max-width:600px;
 border-radius:10px;
 border:2px solid #ddd;
 }
 
-.card{
-background:white;
-padding:15px;
+.score{
+font-size:26px;
 margin-top:10px;
-border-radius:10px;
-box-shadow:0 2px 5px rgba(0,0,0,0.1);
 }
 
-.score{
-font-size:28px;
-font-weight:bold;
+.message{
+font-size:20px;
+margin-top:10px;
 }
 
 .good{
@@ -67,20 +64,19 @@ color:red;
 <body>
 
 <div class="header">
-AI 공부 자세 교정 앱
+AI 공부 자세 교정
 </div>
 
 <div class="container">
 
-<video id="video" autoplay></video>
+<video id="video" autoplay playsinline></video>
+<canvas id="canvas"></canvas>
 
-<canvas id="canvas" width="640" height="480"></canvas>
-
-<div class="card">
-<div class="score" id="scoreText">자세 점수: 100</div>
+<div class="score" id="scoreText">
+자세 점수: 100
 </div>
 
-<div class="card" id="message">
+<div class="message good" id="message">
 좋은 자세입니다 🙂
 </div>
 
@@ -95,22 +91,13 @@ const ctx=canvas.getContext("2d")
 const scoreText=document.getElementById("scoreText")
 const message=document.getElementById("message")
 
-function beep(){
-
-let audioCtx=new(window.AudioContext||window.webkitAudioContext)()
-let oscillator=audioCtx.createOscillator()
-
-oscillator.frequency.value=800
-oscillator.connect(audioCtx.destination)
-oscillator.start()
-
-setTimeout(()=>oscillator.stop(),200)
-
-}
-
 async function setupCamera(){
 
-const stream=await navigator.mediaDevices.getUserMedia({video:true})
+const stream=await navigator.mediaDevices.getUserMedia({
+video:{
+facingMode:"user"
+}
+})
 
 video.srcObject=stream
 
@@ -139,7 +126,10 @@ async function detectPose(detector){
 
 const poses=await detector.estimatePoses(video)
 
-ctx.drawImage(video,0,0,640,480)
+canvas.width=video.videoWidth
+canvas.height=video.videoHeight
+
+ctx.drawImage(video,0,0,canvas.width,canvas.height)
 
 if(poses.length>0){
 
@@ -152,7 +142,7 @@ const kp=keypoints[i]
 if(kp.score>0.4){
 
 ctx.beginPath()
-ctx.arc(kp.x,kp.y,5,0,Math.PI*2)
+ctx.arc(kp.x,kp.y,6,0,Math.PI*2)
 ctx.fillStyle="red"
 ctx.fill()
 
@@ -215,14 +205,12 @@ bad=true
 }
 
 scoreText.innerText="자세 점수: "+score
-
 message.innerText=msg
 
 if(bad){
-message.className="card bad"
-beep()
+message.className="message bad"
 }else{
-message.className="card good"
+message.className="message good"
 }
 
 }
