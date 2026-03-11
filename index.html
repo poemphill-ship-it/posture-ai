@@ -25,14 +25,6 @@ padding:15px;
 font-size:20px;
 }
 
-.container{
-padding:10px;
-}
-
-video{
-display:none;
-}
-
 canvas{
 width:100%;
 max-width:600px;
@@ -50,13 +42,8 @@ font-size:20px;
 margin-top:10px;
 }
 
-.good{
-color:green;
-}
-
-.bad{
-color:red;
-}
+.good{color:green;}
+.bad{color:red;}
 
 </style>
 </head>
@@ -67,9 +54,7 @@ color:red;
 AI 공부 자세 교정
 </div>
 
-<div class="container">
-
-<video id="video" autoplay playsinline></video>
+<video id="video" autoplay playsinline style="display:none"></video>
 <canvas id="canvas"></canvas>
 
 <div class="score" id="scoreText">
@@ -78,8 +63,6 @@ AI 공부 자세 교정
 
 <div class="message good" id="message">
 좋은 자세입니다 🙂
-</div>
-
 </div>
 
 <script>
@@ -91,11 +74,16 @@ const ctx=canvas.getContext("2d")
 const scoreText=document.getElementById("scoreText")
 const message=document.getElementById("message")
 
+// 점 흔들림 줄이기용
+let lastPoints={}
+
 async function setupCamera(){
 
 const stream=await navigator.mediaDevices.getUserMedia({
 video:{
-facingMode:"user"
+facingMode:"user",
+width:{ideal:1280},
+height:{ideal:720}
 }
 })
 
@@ -122,6 +110,19 @@ detectPose(detector)
 
 }
 
+function smoothPoint(name,x,y){
+
+if(!lastPoints[name]){
+lastPoints[name]={x,y}
+}
+
+lastPoints[name].x=lastPoints[name].x*0.7+x*0.3
+lastPoints[name].y=lastPoints[name].y*0.7+y*0.3
+
+return lastPoints[name]
+
+}
+
 async function detectPose(detector){
 
 const poses=await detector.estimatePoses(video)
@@ -135,29 +136,31 @@ if(poses.length>0){
 
 const keypoints=poses[0].keypoints
 
-for(let i=0;i<keypoints.length;i++){
-
-const kp=keypoints[i]
-
-if(kp.score>0.4){
-
-ctx.beginPath()
-ctx.arc(kp.x,kp.y,6,0,Math.PI*2)
-ctx.fillStyle="red"
-ctx.fill()
-
-}
-
-}
-
-const nose=keypoints.find(k=>k.name==="nose")
-const leftShoulder=keypoints.find(k=>k.name==="left_shoulder")
-const rightShoulder=keypoints.find(k=>k.name==="right_shoulder")
-const leftHip=keypoints.find(k=>k.name==="left_hip")
-
 let score=100
 let msg="좋은 자세입니다 🙂"
 let bad=false
+
+let nose,leftShoulder,rightShoulder,leftHip
+
+for(let kp of keypoints){
+
+if(kp.score>0.4){
+
+let p=smoothPoint(kp.name,kp.x,kp.y)
+
+ctx.beginPath()
+ctx.arc(p.x,p.y,6,0,Math.PI*2)
+ctx.fillStyle="red"
+ctx.fill()
+
+if(kp.name==="nose") nose=p
+if(kp.name==="left_shoulder") leftShoulder=p
+if(kp.name==="right_shoulder") rightShoulder=p
+if(kp.name==="left_hip") leftHip=p
+
+}
+
+}
 
 // 어깨 기울기
 if(leftShoulder && rightShoulder){
@@ -165,11 +168,9 @@ if(leftShoulder && rightShoulder){
 let dy=leftShoulder.y-rightShoulder.y
 
 if(Math.abs(dy)>20){
-
 score-=20
 msg="어깨 균형을 맞추세요"
 bad=true
-
 }
 
 }
@@ -180,11 +181,9 @@ if(nose && leftShoulder && rightShoulder){
 let shoulderX=(leftShoulder.x+rightShoulder.x)/2
 
 if(nose.x>shoulderX+40){
-
 score-=30
 msg="목을 뒤로 당기세요"
 bad=true
-
 }
 
 }
@@ -195,11 +194,9 @@ if(leftShoulder && leftHip){
 let dy=leftHip.y-leftShoulder.y
 
 if(dy<100){
-
 score-=30
 msg="허리를 펴세요"
 bad=true
-
 }
 
 }
